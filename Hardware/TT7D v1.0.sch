@@ -1264,8 +1264,8 @@ In this library the device names are the same as the pin names of the symbols, t
 <text x="345.44" y="60.96" size="1.778" layer="94">Si4060 / Si4063 / Si4460 / Si4463</text>
 <text x="345.44" y="58.42" size="1.778" layer="94">3.3V operating voltage, power source: AAA primary cell.</text>
 <text x="345.44" y="55.88" size="1.778" layer="94">Optionally solar powered - two cells instead of battery.</text>
-<text x="116.84" y="22.86" size="1.778" layer="94">RC filter: L2=10kΩ, C8=2.4pF,  C9=NC</text>
-<text x="116.84" y="20.32" size="1.778" layer="94">Voltage Divider: R6=4.7kΩ, R5=10kΩ</text>
+<text x="116.84" y="22.86" size="1.778" layer="94">RC filter: L2=R=4.7kΩ, C8=2.4pF,  C9=NC</text>
+<text x="116.84" y="20.32" size="1.778" layer="94">Voltage Divider: R6=NC, R5=0Ω</text>
 </plain>
 <instances>
 <instance part="U1" gate="A" x="114.3" y="147.32"/>
