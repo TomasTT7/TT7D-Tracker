@@ -79,7 +79,7 @@ void SI4X6X_init(uint32_t ref_freq, uint8_t tcxo)
 
 
 /*
-	Reset via SDN pin required to bring the transmitter to its original state (least consumption).
+	Leaves the IC in Standby or Sleep state (low consumption).
 */
 void SI4X6X_deinit(uint8_t tcxo)
 {
@@ -90,8 +90,6 @@ void SI4X6X_deinit(uint8_t tcxo)
 	DDRB &= ~(1 << PORTB0);												// set PB0 to INPUT
 	
 	/* Deinit SDN */
-	PORTB |= (1 << PORTB1);												// set PB1 (SDN) HIGH
-	_delay_ms(1);
 	PORTB &= ~(1 << PORTB1);											// set PB1 (SDN) LOW
 	DDRB &= ~(1 << PORTB1);												// set PB1 to INPUT
 	
@@ -157,29 +155,6 @@ void SI4X6X_check_CTS(void)
 
 
 /*
-	STATE
-		NOCHANGE	0x00	No change, remain in current state.
-		SLEEP		0x01 	SLEEP or STANDBY state.
-		SPI_ACTIVE	0x02	SPI_ACTIVE state.
-		READY		0x03	READY state.
-		TX_TUNE		0x05	TX_TUNE state.
-		RX_TUNE		0x06	RX_TUNE state. (Si4463)
-		TX			0x07	TX state.
-		RX			0x08	RX state. (Si4463)
-*/
-void SI4X6X_change_state(uint8_t state)
-{
-	uint8_t rx_buffer[16];
-	
-	SPI_assert_SS();
-	SPI_write(0x34);													// CHANGE_STATE
-	SPI_write(state);
-	SPI_deassert_SS();
-	SI4X6X_rx_CTS(rx_buffer, 1);
-}
-
-
-/*
 	TYPICAL SETTINGS
 		GPIO0			8		disable pull-up, Clear To Send signal output
 		GPIO1			16		disable pull-up, TX Data Clock signal output
@@ -204,4 +179,104 @@ void SI4X6X_setup_pins(uint8_t gpio0, uint8_t gpio1, uint8_t gpio2, uint8_t gpio
 	SPI_write(0x00);													// Drive Strength
 	SPI_deassert_SS();
 	SI4X6X_rx_CTS(rx_buffer, 8);
+}
+
+
+/*
+	STATE
+		SHUTDOWN	SDN		30nA
+		
+		NOCHANGE	0x00				No change, remain in current state.
+		SLEEP		0x01 	50-900nA	STANDBY or SLEEP state.
+		SPI_ACTIVE	0x02	1.35mA		SPI_ACTIVE state.
+		READY		0x03	1.8mA		READY state.
+		TX_TUNE		0x05	8.0mA		TX_TUNE state.
+		RX_TUNE		0x06	7.2mA		RX_TUNE state. (Si4463)
+		TX			0x07	18-85mA		TX state.
+		RX			0x08	10-13mA		RX state. (Si4463)
+*/
+void SI4X6X_change_state(uint8_t state)
+{
+	uint8_t rx_buffer[16];
+	
+	SPI_assert_SS();
+	SPI_write(0x34);													// CHANGE_STATE
+	SPI_write(state);
+	SPI_deassert_SS();
+	SI4X6X_rx_CTS(rx_buffer, 1);
+}
+
+
+/*
+	This command switches the chip to TX state and begins transmission of a packet.
+*/
+void SI4X6X_start_TX(uint8_t channel)
+{
+	SPI_assert_SS();
+	SPI_write(0x31);													// START_TX
+	SPI_write(channel);													// CHANNEL
+	SPI_write((1 << 4) | 0x00);											// CONDITION - SLEEP after end of transmission
+	SPI_write(0x00);													// TX_LEN
+	SPI_write(0x00);													// TX_LEN
+	SPI_deassert_SS();
+	
+	SI4X6X_check_CTS();
+}
+
+
+/*
+	byte 0		CTS			0xFF
+	byte 1		CHIPREV		0x11
+	byte 2		PART		0x40
+	byte 3		PART		0x60
+	byte 4		PBUILD		0x00
+	byte 5		ID			0x00
+	byte 6		ID			0x0F
+	byte 7		CUSTOMER	0x00
+	byte 8		ROMID		0x00
+*/
+void SI4X6X_part_info(uint8_t * buffer)
+{
+	SPI_assert_SS();
+	SPI_write(0x01);													// PART_INFO
+	SPI_deassert_SS();
+	SI4X6X_rx_CTS(buffer, 9);
+}
+
+
+/*
+	byte 0		CTS			0xFF
+	byte 1		REVEXT		External revision number.
+	byte 2		REVBRANCH	Branch revision number.
+	byte 3		REVINT		Internal revision number.
+	byte 4		PATCH		ID of applied patch.
+	byte 5		PATCH		0x0000 = No patch applied.
+	byte 6		FUNC		Current functional mode.
+*/
+void SI4X6X_func_info(uint8_t * buffer)
+{
+	SPI_assert_SS();
+	SPI_write(0x10);													// FUNC_INFO
+	SPI_deassert_SS();
+	SI4X6X_rx_CTS(buffer, 7);
+}
+
+
+/*
+	Returns an 11-bit, temperature measurement of the Si4x6x's internal temperature sensor.
+	
+	Temperature [°C] = (899 / 4096) * TEMP_ADC[10:0] - 293
+*/
+uint16_t SI4X6X_get_temperature(void)
+{
+	uint8_t rx_buffer[16];
+	
+	SPI_assert_SS();
+	SPI_write(0x14);													// GET_ADC_READING
+	SPI_write(0b00010000);												// TEMPERATURE_EN
+	SPI_write(0xC0);													// ADC rate of conversion 325Hz
+	SPI_deassert_SS();
+	SI4X6X_rx_CTS(rx_buffer, 7);
+	
+	return ((uint16_t)rx_buffer[5] << 8) | rx_buffer[6];
 }
