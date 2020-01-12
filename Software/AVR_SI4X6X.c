@@ -45,12 +45,28 @@
 	TCXO
 		0	Timepulse reference signal to Si4x6x
 		1	TCXO reference signal to Si4x6x
+		
+	XO_FREQ
+		Setting XO_FREQ in POWER_UP command to the TCXO's frequency of 16,369,000Hz (out of specs) fails the initialization.
+		Leaving it at default 30,000,000Hz or setting it to the minimum of 25,000,000Hz proceeds the initialization fine.
 */
 void SI4X6X_init(uint32_t ref_freq, uint8_t tcxo)
 {
 	/* Assumes SPI interface already initialized */
 	
-	/* Assumes Timepulse to Xin pin already enabled */
+	/* The XO capacitor bank should be set to 0 whenever an external drive is used on the XIN pin. */
+	uint8_t rx_buffer[16];
+	
+	SPI_assert_SS();
+	SPI_master_transmit(0x11);											// SET_PROPERTY (CMD)
+	SPI_master_transmit(0x00);											// GLOBAL (group)
+	SPI_master_transmit(0x01);											// 1 (num_props)
+	SPI_master_transmit(0x00);											// GLOBAL_XO_TUNE (start_prop)
+	SPI_master_transmit(0x00);											// FASTEST_FREQUENCY (Lowest capacitance)
+	SPI_deassert_SS();
+	SI4X6X_rx_CTS(rx_buffer, 1);
+	
+	/* Assumes Timepulse to Xin pin already enabled. */
 	if(tcxo)
 	{
 		DDRD |= (1 << PORTD6);											// set PD6 to OUTPUT
@@ -67,17 +83,6 @@ void SI4X6X_init(uint32_t ref_freq, uint8_t tcxo)
 	_delay_ms(1);
 	PORTB &= ~(1 << PORTB1);											// set PB1 (SDN) LOW
 	_delay_ms(10);														// wait for POR to finish
-	
-	uint8_t rx_buffer[16];
-	
-	SPI_assert_SS();
-	SPI_master_transmit(0x11);											// SET_PROPERTY (CMD)
-	SPI_master_transmit(0x00);											// GLOBAL (group)
-	SPI_master_transmit(0x01);											// 1 (num_props)
-	SPI_master_transmit(0x00);											// GLOBAL_XO_TUNE (start_prop)
-	SPI_master_transmit(0x00);											// FASTEST_FREQUENCY (Lowest capacitance)
-	SPI_deassert_SS();
-	SI4X6X_rx_CTS(rx_buffer, 1);
 	
 	SPI_assert_SS();
 	SPI_master_transmit(0x02);											// POWER_UP - 15ms
@@ -340,16 +345,16 @@ void SI4X6X_set_frequency(uint32_t frequency, uint32_t ref_freq)
 	if(frequency > 700000000UL) {outdiv = 4;  band = 0;};				// 850-1050MHz
 	
 	/* Divide Ratio */
-	uint32_t f_pfd = 2 * ref_freq / outdiv;								// 2,000,000 = 2 * 12,000,000 / 24
-	uint32_t n = (frequency / f_pfd) - 1;								// 71 = 145,000,000 / 2,000,000 - 1
+	uint32_t f_pfd = 2 * ref_freq / outdiv;								// 1,364,083 = 2 * 16,369,000 / 24
+	uint32_t n = (frequency / f_pfd) - 1;								// 105 = 145,000,000 / 1,364,083 - 1
 	
-	float ratio = (float)frequency / (float)f_pfd;						// 72.5 = 145,000,000 / 2,000,000
-	float rest = ratio - (float)n;										// 1.5 = 72.5 - 71.0
+	float ratio = (float)frequency / (float)f_pfd;						// 106.299 = 145,000,000 / 1,364,083
+	float rest = ratio - (float)n;										// 1.299 = 106.299 - 105.0
 	
-	uint32_t m = (uint32_t)(rest * 524288UL);							// 786,432 = 1.5 * 524,288
-	uint32_t m2 = m / 65536;											// 12 = 786,432 / 65,536
-	uint32_t m1 = (m - m2 * 65536) / 256;								// 0 = (786,432 - 12 * 65536) / 256
-	uint32_t m0 = (m - m2 * 65536 - m1 * 256);							// 0 = (786,432 - 12 * 65536 - 0 * 256)
+	uint32_t m = (uint32_t)(rest * 524288UL);							// 680,796 = 1.299 * 524,288
+	uint32_t m2 = m / 65536;											// 10 = 680,796 / 65,536
+	uint32_t m1 = (m - m2 * 65536) / 256;								// 99 = (680,796 - 10 * 65536) / 256
+	uint32_t m0 = (m - m2 * 65536 - m1 * 256);							// 92 = (680,796 - 10 * 65536 - 99 * 256)
 	
 	/* Configuration */
 	uint8_t rx_buffer[16];
@@ -383,8 +388,8 @@ void SI4X6X_set_frequency(uint32_t frequency, uint32_t ref_freq)
 		MODEM_FREQ_DEV = (2^19 * outdiv * DEVIATION_Hz) / (Npresc * freq_xo)
 	
 	Example:
-		MODEM_FREQ_DEV (145MHz): (2^19 * 24 * 3,000) / (2 * 12,000,000) = 1573
-		MODEM_FREQ_DEV (434MHz): (2^19 * 8 * 225) / (2 * 12,000,000) = 39
+		MODEM_FREQ_DEV (145MHz): (2^19 * 24 * 3,000) / (2 * 16,369,000) = 1153
+		MODEM_FREQ_DEV (434MHz): (2^19 * 8 * 225) / (2 * 16,369,000) = 29
 	
 	The property sets PEAK DEVIATION (deviation of the peak from the carrier).
 */
@@ -488,7 +493,7 @@ void SI4X6X_set_modulation(uint8_t mod, uint8_t async)
 		TX_DATA_RATE = NCO_CLK_FREQ / TXOSR
 	
 	Example:
-		24,000 = (24,000 * 12,000,000) / 12,000,000
+		24,000 = (24,000 * 16,369,000) / 16,369,000
 		
 		2,400 = 24,000 / 10
 */
@@ -501,10 +506,10 @@ void SI4X6X_set_data_rate(uint32_t data_rate, uint8_t txosr)
 	SPI_master_transmit(0x20);											// MODEM (group)
 	SPI_master_transmit(0x04);											// 4 (num_props)
 	SPI_master_transmit(0x06);											// MODEM_TX_NCO_MODE (start_prop)
-	SPI_master_transmit((txosr << 2) | 0x00);							// data (MODEM_TX_NCO_MODE) - TXOSR, hard-coded 12,000,000 Bit[25:0]
-	SPI_master_transmit(0xB7);											// data (MODEM_TX_NCO_MODE) 
-	SPI_master_transmit(0x1B);											// data (MODEM_TX_NCO_MODE)
-	SPI_master_transmit(0x00);											// data (MODEM_TX_NCO_MODE)
+	SPI_master_transmit((txosr << 2) | 0x00);							// data (MODEM_TX_NCO_MODE) - TXOSR, hard-coded 16,369,000 Bit[25:0]
+	SPI_master_transmit(0xF9);											// data (MODEM_TX_NCO_MODE) 
+	SPI_master_transmit(0xC5);											// data (MODEM_TX_NCO_MODE)
+	SPI_master_transmit(0x68);											// data (MODEM_TX_NCO_MODE)
 	SPI_deassert_SS();
 	SI4X6X_rx_CTS(rx_buffer, 1);
 	
@@ -631,21 +636,21 @@ void SI4X6X_set_filter_coefficients(void)
 void SI4X6X_tx_CW_blips(uint32_t count, uint32_t duration, uint32_t delay)
 {
 	SI4X6X_set_modulation(0, 1);										// CW, Asynchronous
-	
+	/*
 	for(uint32_t i = 0; i < count; i++)
 	{
 		SI4X6X_change_state(7);											// TX
 		_delay_ms(duration);
 		SI4X6X_change_state(2);											// SPI_ACTIVE
 		_delay_ms(delay);
-	}
+	}*/
 }
 
 
 /*
 	
 */
-void SI4X6X_tx_FSK_rtty();
+void SI4X6X_tx_FSK_rtty()
 {
 	SI4X6X_set_modulation(2, 1);										// 2FSK, Asynchronous
 	
@@ -656,7 +661,7 @@ void SI4X6X_tx_FSK_rtty();
 /*
 	
 */
-void SI4X6X_tx_GFSK_aprs();
+void SI4X6X_tx_GFSK_aprs()
 {
 	SI4X6X_set_modulation(3, 0);										// 2GFSK, Synchronous
 	
