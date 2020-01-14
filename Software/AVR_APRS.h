@@ -16,7 +16,8 @@
 
 
 // Functions
-uint8_t APRS_packet(void);
+uint8_t APRS_packet(uint8_t * packet, uint8_t * callsign, uint8_t ssid, float lat, float lon, uint16_t alt, uint16_t sequence,
+					uint8_t sats, uint16_t battery, uint16_t temperature, uint16_t active_time, uint8_t noposition);
 uint8_t APRS_altitude_offset(uint16_t alt);
 uint16_t APRS_bitstream(uint8_t * data, uint8_t len, uint8_t * output);
 

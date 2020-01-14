@@ -39,6 +39,7 @@
 #include <avr/io.h>
 #include <util/delay.h>
 #include "AVR_SPI.h"
+#include "AVR_TC.h"
 
 
 // Functions
@@ -60,9 +61,10 @@ void SI4X6X_set_data_rate(uint32_t data_rate, uint8_t txosr);
 void SI4X6X_set_PA_mode(uint8_t pa_sel, uint8_t pa_mode);
 void SI4X6X_set_power_level(uint8_t level);
 void SI4X6X_set_filter_coefficients(void);
-void SI4X6X_tx_CW_blips(uint32_t count, uint32_t duration, uint32_t delay);
-void SI4X6X_tx_FSK_rtty();
-void SI4X6X_tx_GFSK_aprs();
+void SI4X6X_tx_CW_blips(uint32_t count, uint16_t length_ms, uint32_t frequency, uint32_t ref_freq, uint16_t modem_freq_offset);
+void SI4X6X_tx_FSK_rtty(uint8_t * packet, uint8_t length, uint16_t baud, uint32_t frequency,
+						uint32_t ref_freq, uint16_t modem_freq_dev, uint16_t modem_freq_offset);
+void SI4X6X_tx_GFSK_aprs(uint8_t * bitstream, uint16_t length, uint32_t frequency, uint32_t ref_freq);
 
 
 #endif // AVR_SI4X6X_H_

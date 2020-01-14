@@ -110,7 +110,7 @@ void SI4X6X_init(uint32_t ref_freq, uint8_t tcxo)
 */
 void SI4X6X_deinit(uint8_t tcxo)
 {
-	SI4X6X_change_state(1);												// Sleep/Standby
+	SI4X6X_change_state(1);												// SLEEP/STANDBY
 	
 	/* ATmega328P Pins Deinit */
 	PORTB &= ~(1 << PORTB0);											// set PB0 (GPIO2 - TXDATA) LOW
@@ -631,39 +631,103 @@ void SI4X6X_set_filter_coefficients(void)
 
 
 /*
+	Transmits selected number of CW blips with set duration and delay.
+	Intended to signal upcoming RTTY transmission and warm up the transmitter to stabilize output frequency.
 	
+	Blip Length:		1ms - 8350ms
 */
-void SI4X6X_tx_CW_blips(uint32_t count, uint32_t duration, uint32_t delay)
+void SI4X6X_tx_CW_blips(uint32_t count, uint16_t length_ms, uint32_t frequency, uint32_t ref_freq, uint16_t modem_freq_offset)
 {
 	SI4X6X_set_modulation(0, 1);										// CW, Asynchronous
-	/*
+	SI4X6X_set_frequency(frequency, ref_freq);
+	SI4X6X_set_frequency_offset(modem_freq_offset);
+	
+	uint16_t ocr1a = (uint16_t)((uint32_t)length_ms * 1000 / 128);
+	
+	TC1_init(ocr1a, 5, 0);												// 8MHz / 1024 = 7812.5Hz timer frequency
+	
 	for(uint32_t i = 0; i < count; i++)
 	{
 		SI4X6X_change_state(7);											// TX
-		_delay_ms(duration);
-		SI4X6X_change_state(2);											// SPI_ACTIVE
-		_delay_ms(delay);
-	}*/
+		while(!TC1_compare_match());
+		SI4X6X_change_state(1);											// SLEEP/STANDBY
+		while(!TC1_compare_match());
+	}
+	
+	TC1_deinit();
 }
 
 
 /*
+	RTTY: 8-bit, 2 stop bits, no parity
 	
+	BAUD
+		50		20ms		11s (50 bytes)
+		100		10ms		5.5s (50 bytes)
+		300		3.3ms		1.8s (50 bytes)
+		600		1.7ms		0.9s (50 bytes)
+	
+	BAUD RATE		FREQUENCY SHIFT		MODEM_FREQ_DEV
+	100 baud		450Hz shift			29 (434MHz)
+	300 baud		850Hz shift			54 (434MHz)
 */
-void SI4X6X_tx_FSK_rtty()
+void SI4X6X_tx_FSK_rtty(uint8_t * packet, uint8_t length, uint16_t baud, uint32_t frequency,
+						uint32_t ref_freq, uint16_t modem_freq_dev, uint16_t modem_freq_offset)
 {
 	SI4X6X_set_modulation(2, 1);										// 2FSK, Asynchronous
+	SI4X6X_set_frequency(frequency, ref_freq);
+	SI4X6X_set_frequency_deviation(modem_freq_dev);
+	SI4X6X_set_frequency_offset(modem_freq_offset);
 	
+	uint16_t ocr1a = (uint16_t)(1000000 / (uint32_t)baud) - 1;
 	
+	TC1_init(ocr1a, 2, 0);												// 8MHz / 8 = 1MHz timer frequency
+	SI4X6X_change_state(7);												// TX
+	
+	for(uint8_t i = 0; i < length; i++)
+	{
+		uint8_t c = packet[i];
+		
+		/* Start Bit */
+		PORTB &= ~(1 << PORTB0);										// set PB0 (GPIO2 - TXDATA) LOW
+		while(!TC1_compare_match());
+		
+		/* Data Bits */
+		for(uint8_t b = 0; b < 8; b++)
+		{
+			if(c & 0x01) PORTB |= (1 << PORTB0);						// set PB0 (GPIO2 - TXDATA) HIGH
+			else PORTB &= ~(1 << PORTB0);								// set PB0 (GPIO2 - TXDATA) LOW
+		
+			c >>= 1;
+			
+			while(!TC1_compare_match());
+		}
+		
+		/* Stop Bits */
+		PORTB |= (1 << PORTB0);											// set PB0 (GPIO2 - TXDATA) HIGH
+		while(!TC1_compare_match());
+		PORTB |= (1 << PORTB0);											// set PB0 (GPIO2 - TXDATA) HIGH
+		while(!TC1_compare_match());
+	}
+	
+	SI4X6X_change_state(1);												// SLEEP/STANDBY
+	TC1_deinit();
 }
 
 
 /*
 	
 */
-void SI4X6X_tx_GFSK_aprs()
+void SI4X6X_tx_GFSK_aprs(uint8_t * bitstream, uint16_t length, uint32_t frequency, uint32_t ref_freq)
 {
+	uint16_t modem_freq_dev = 39;
+	
 	SI4X6X_set_modulation(3, 0);										// 2GFSK, Synchronous
+	SI4X6X_set_frequency(frequency, ref_freq);
+	SI4X6X_set_frequency_deviation(modem_freq_dev);
+	SI4X6X_set_frequency_offset(0);
+	SI4X6X_set_data_rate(24000, 0);
+	SI4X6X_set_filter_coefficients();
 	
 	
 }
