@@ -196,33 +196,33 @@ uint16_t APRS_bitstream(uint8_t * data, uint8_t len, uint8_t * output)
 	
 	for(uint16_t i = 0; i < len; i++)
 	{
-		for(int8_t b = 7; b >= 0; b--)
+		for(int8_t b = 0; b < 8; b++)
 		{
 			if(data[i] & (1 << b))								// bit '1'
 			{
 				if(data[i] == 0x7E)								// bit '1' in Flag
 				{
 					_byte = out_bits / 8;
-					_bit = 7 - (out_bits % 8);
+					_bit = out_bits % 8;
 					
 					output[_byte] |= (1 << _bit);
 					
 					series = 0;
 					out_bits++;
 				}else{											// bit '1' in normal byte
-					if(series == 5)								// bit '0' stuffed in
-					{
-						series = 0;
-						out_bits++;
-					}
-					
 					_byte = out_bits / 8;
-					_bit = 7 - (out_bits % 8);
+					_bit = out_bits % 8;
 					
 					output[_byte] |= (1 << _bit);
 					
 					series++;
 					out_bits++;
+					
+					if(series == 5)								// bit '0' stuffed in
+					{
+						series = 0;
+						out_bits++;
+					}
 				}
 			}else{												// bit '0'
 				series = 0;

@@ -1,5 +1,10 @@
 /*
-	
+	Timer/Counter0 - 8-bit
+		-
+	Timer/Counter1 - 16-bit
+		APRS, RTTY, CW
+	Timer/Counter2 - 8-bit
+		Active Time
 */
 
 
@@ -15,6 +20,7 @@
 void TC1_init(uint16_t ocr1a, uint8_t prescaler, uint8_t interrupt);
 void TC1_deinit(void);
 uint8_t TC1_compare_match(void);
+uint8_t TC1_check_bit(void);
 
 void TC2_init(uint8_t ocr2a, uint8_t prescaler, uint8_t interrupt);
 void TC2_deinit(void);

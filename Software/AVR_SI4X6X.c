@@ -35,6 +35,9 @@
 #include "AVR_SI4X6X.h"
 
 
+volatile uint8_t gfsk_toggle = 0;
+
+
 /*
 	Si4x6x Initialization
 		-drive SDN HIGH for a minimum of 10us
@@ -388,8 +391,10 @@ void SI4X6X_set_frequency(uint32_t frequency, uint32_t ref_freq)
 		MODEM_FREQ_DEV = (2^19 * outdiv * DEVIATION_Hz) / (Npresc * freq_xo)
 	
 	Example:
+		MODEM_FREQ_DEV (145MHz): (2^19 * 24 * 1,650) / (2 * 16,369,000) = 634
 		MODEM_FREQ_DEV (145MHz): (2^19 * 24 * 3,000) / (2 * 16,369,000) = 1153
 		MODEM_FREQ_DEV (434MHz): (2^19 * 8 * 225) / (2 * 16,369,000) = 29
+		MODEM_FREQ_DEV (434MHz): (2^19 * 8 * 425) / (2 * 16,369,000) = 54
 	
 	The property sets PEAK DEVIATION (deviation of the peak from the carrier).
 */
@@ -493,9 +498,9 @@ void SI4X6X_set_modulation(uint8_t mod, uint8_t async)
 		TX_DATA_RATE = NCO_CLK_FREQ / TXOSR
 	
 	Example:
-		24,000 = (24,000 * 16,369,000) / 16,369,000
+		12,000 = (12,000 * 16,369,000) / 16,369,000
 		
-		2,400 = 24,000 / 10
+		1,200 = 12,000 / 10
 */
 void SI4X6X_set_data_rate(uint32_t data_rate, uint8_t txosr)
 {
@@ -716,18 +721,105 @@ void SI4X6X_tx_FSK_rtty(uint8_t * packet, uint8_t length, uint16_t baud, uint32_
 
 
 /*
+	APRS: 1200 baud, 1200Hz tone 1.65kHz peak deviation, 2200Hz tone 3.00kHz peak deviation (PRE-EMPHASIS)
 	
+	MODEM_FREQ_DEV		MODEM_DATA_RATE		TXOSR
+	634					12000				10x			1.65kHz		145MHz
+	1153				22000				10x			3.00kHz		145MHz
+	
+	ATMEGA328P SPI: 4MHz (tone change: 14 bytes ~28us)
 */
-void SI4X6X_tx_GFSK_aprs(uint8_t * bitstream, uint16_t length, uint32_t frequency, uint32_t ref_freq)
+void SI4X6X_tx_GFSK_aprs(uint8_t * bitstream, uint16_t length, uint32_t frequency, uint32_t ref_freq, uint16_t modem_freq_offset)
 {
-	uint16_t modem_freq_dev = 39;
+	uint8_t current_tone = 0;											// 0 - 1200Hz, 1 - 2200Hz
+	uint16_t bit_count = 0;
+	
+	uint32_t modem_freq_dev = 634;
+	uint32_t modem_data_rate = 12000;
 	
 	SI4X6X_set_modulation(3, 0);										// 2GFSK, Synchronous
 	SI4X6X_set_frequency(frequency, ref_freq);
+	SI4X6X_set_frequency_offset(modem_freq_offset);
 	SI4X6X_set_frequency_deviation(modem_freq_dev);
-	SI4X6X_set_frequency_offset(0);
-	SI4X6X_set_data_rate(24000, 0);
+	SI4X6X_set_data_rate(modem_data_rate, 0);							// TXOSR: 10x
 	SI4X6X_set_filter_coefficients();
 	
+	/* External Interrupt */
+	EICRA |= (1 << ISC10);												// any logical change on INT1 generates interrupt request
+	EIMSK |= (1 << INT1);												// enable INT1
+	sei();																// global interrupt enable
 	
+	TC1_init(832, 2, 1);												// 8MHz / 8 = 1MHz timer frequency, 1200hz interrupt frequency
+	SI4X6X_change_state(7);												// TX
+	
+	while(1)
+	{
+		if(TC1_check_bit())
+		{
+			bit_count++;
+			
+			uint8_t _byte = bit_count / 8;
+			uint8_t _bit = bit_count % 8;
+			
+			if(!(bitstream[_byte] & (1 << _bit)))						// '0' bit -> change tone
+			{
+				if(current_tone)
+				{
+					modem_freq_dev = 634;
+					modem_data_rate = 12000;
+					current_tone = 0;
+				}else{
+					modem_freq_dev = 1153;
+					modem_data_rate = 22000;
+					current_tone = 1;
+				}
+				
+				/* Data Rate */
+				SPI_assert_SS();
+				SPI_master_transmit(0x11);									// SET_PROPERTY (CMD)
+				SPI_master_transmit(0x20);									// MODEM (group)
+				SPI_master_transmit(0x03);									// 3 (num_props)
+				SPI_master_transmit(0x03);									// MODEM_DATA_RATE (start_prop)
+				SPI_master_transmit(modem_data_rate >> 16);					// data (MODEM_DATA_RATE)
+				SPI_master_transmit(modem_data_rate >> 8);					// data (MODEM_DATA_RATE)
+				SPI_master_transmit(modem_data_rate);						// data (MODEM_DATA_RATE)
+				SPI_deassert_SS();
+				SI4X6X_check_CTS();
+				
+				/* Frequency Deviation */
+				SPI_assert_SS();
+				SPI_master_transmit(0x11);									// SET_PROPERTY (CMD)
+				SPI_master_transmit(0x20);									// MODEM (group)
+				SPI_master_transmit(0x03);									// 3 (num_props)
+				SPI_master_transmit(0x0A);									// MODEM_FREQ_DEV (start_prop)
+				SPI_master_transmit((modem_freq_dev >> 16) & 0xFF);			// data (MODEM_FREQ_DEV)
+				SPI_master_transmit((modem_freq_dev >> 8) & 0xFF);			// data (MODEM_FREQ_DEV)
+				SPI_master_transmit(modem_freq_dev & 0xFF);					// data (MODEM_FREQ_DEV)
+				SPI_deassert_SS();
+			}
+		}
+		
+		if(bit_count >= length) break;
+	}
+	
+	EIMSK &= ~(1 << INT1);												// disable INT1
+	TC1_deinit();
+	SI4X6X_check_CTS();
+	SI4X6X_change_state(1);												// SLEEP/STANDBY
+}
+
+
+/*
+	External interrupt handler for PD3 - TX_DATA_CLK.
+*/
+ISR(INT1_vect)
+{
+	if(gfsk_toggle)
+	{
+		PORTB |= (1 << PORTB0);											// set PB0 (GPIO2 - TXDATA) HIGH
+		gfsk_toggle = 0;
+	}else{
+		PORTB &= ~(1 << PORTB0);										// set PB0 (GPIO2 - TXDATA) LOW
+		gfsk_toggle = 1;
+	}
 }

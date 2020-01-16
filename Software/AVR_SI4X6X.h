@@ -37,6 +37,7 @@
 
 
 #include <avr/io.h>
+#include <avr/interrupt.h>
 #include <util/delay.h>
 #include "AVR_SPI.h"
 #include "AVR_TC.h"
@@ -64,7 +65,7 @@ void SI4X6X_set_filter_coefficients(void);
 void SI4X6X_tx_CW_blips(uint32_t count, uint16_t length_ms, uint32_t frequency, uint32_t ref_freq, uint16_t modem_freq_offset);
 void SI4X6X_tx_FSK_rtty(uint8_t * packet, uint8_t length, uint16_t baud, uint32_t frequency,
 						uint32_t ref_freq, uint16_t modem_freq_dev, uint16_t modem_freq_offset);
-void SI4X6X_tx_GFSK_aprs(uint8_t * bitstream, uint16_t length, uint32_t frequency, uint32_t ref_freq);
+void SI4X6X_tx_GFSK_aprs(uint8_t * bitstream, uint16_t length, uint32_t frequency, uint32_t ref_freq, uint16_t modem_freq_offset);
 
 
 #endif // AVR_SI4X6X_H_

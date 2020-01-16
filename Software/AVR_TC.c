@@ -11,6 +11,7 @@
 #include "AVR_TC.h"
 
 
+volatile uint8_t TC1_next_bit = 0;
 volatile uint32_t TC2_intr_counter = 0;
 
 
@@ -65,6 +66,22 @@ uint8_t TC1_compare_match(void)
 
 
 /*
+
+*/
+uint8_t TC1_check_bit(void)
+{
+	if(TC1_next_bit)
+	{
+		TC1_next_bit = 0;
+		
+		return 1;
+	}else{
+		return 0;
+	}
+}
+
+
+/*
 	pin toggling here
 	interrupt counting
 	overseeing current bit
@@ -76,7 +93,7 @@ ISR(TIMER1_COMPA_vect)
 {
 	TCNT1 = 0;															// reset counter
 	
-	
+	TC1_next_bit = 1;
 }
 
 
