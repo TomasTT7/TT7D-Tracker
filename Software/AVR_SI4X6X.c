@@ -735,13 +735,13 @@ void SI4X6X_tx_GFSK_aprs(uint8_t * bitstream, uint16_t length, uint32_t frequenc
 	uint16_t bit_count = 0;
 	
 	uint32_t modem_freq_dev = 634;
-	uint32_t modem_data_rate = 12000;
+	uint32_t modem_data_rate = 48000;									// 12000 (TXOSR 10x), 24000 (20x), 48000 (40x)
 	
 	SI4X6X_set_modulation(3, 0);										// 2GFSK, Synchronous
 	SI4X6X_set_frequency(frequency, ref_freq);
 	SI4X6X_set_frequency_offset(modem_freq_offset);
 	SI4X6X_set_frequency_deviation(modem_freq_dev);
-	SI4X6X_set_data_rate(modem_data_rate, 0);							// TXOSR: 10x
+	SI4X6X_set_data_rate(modem_data_rate, 1);							// TXOSR: 0 - 10x, 2 - 20x, 1 - 40x
 	SI4X6X_set_filter_coefficients();
 	
 	/* External Interrupt */
@@ -766,35 +766,35 @@ void SI4X6X_tx_GFSK_aprs(uint8_t * bitstream, uint16_t length, uint32_t frequenc
 				if(current_tone)
 				{
 					modem_freq_dev = 634;
-					modem_data_rate = 12000;
+					modem_data_rate = 48000;							// 12000 (TXOSR 10x), 24000 (20x), 48000 (40x)
 					current_tone = 0;
 				}else{
 					modem_freq_dev = 1153;
-					modem_data_rate = 22000;
+					modem_data_rate = 88000;							// 22000 (TXOSR 10x), 44000 (20x), 88000 (40x)
 					current_tone = 1;
 				}
 				
 				/* Data Rate */
 				SPI_assert_SS();
-				SPI_master_transmit(0x11);									// SET_PROPERTY (CMD)
-				SPI_master_transmit(0x20);									// MODEM (group)
-				SPI_master_transmit(0x03);									// 3 (num_props)
-				SPI_master_transmit(0x03);									// MODEM_DATA_RATE (start_prop)
-				SPI_master_transmit(modem_data_rate >> 16);					// data (MODEM_DATA_RATE)
-				SPI_master_transmit(modem_data_rate >> 8);					// data (MODEM_DATA_RATE)
-				SPI_master_transmit(modem_data_rate);						// data (MODEM_DATA_RATE)
+				SPI_master_transmit(0x11);								// SET_PROPERTY (CMD)
+				SPI_master_transmit(0x20);								// MODEM (group)
+				SPI_master_transmit(0x03);								// 3 (num_props)
+				SPI_master_transmit(0x03);								// MODEM_DATA_RATE (start_prop)
+				SPI_master_transmit(modem_data_rate >> 16);				// data (MODEM_DATA_RATE)
+				SPI_master_transmit(modem_data_rate >> 8);				// data (MODEM_DATA_RATE)
+				SPI_master_transmit(modem_data_rate);					// data (MODEM_DATA_RATE)
 				SPI_deassert_SS();
 				SI4X6X_check_CTS();
 				
 				/* Frequency Deviation */
 				SPI_assert_SS();
-				SPI_master_transmit(0x11);									// SET_PROPERTY (CMD)
-				SPI_master_transmit(0x20);									// MODEM (group)
-				SPI_master_transmit(0x03);									// 3 (num_props)
-				SPI_master_transmit(0x0A);									// MODEM_FREQ_DEV (start_prop)
-				SPI_master_transmit((modem_freq_dev >> 16) & 0xFF);			// data (MODEM_FREQ_DEV)
-				SPI_master_transmit((modem_freq_dev >> 8) & 0xFF);			// data (MODEM_FREQ_DEV)
-				SPI_master_transmit(modem_freq_dev & 0xFF);					// data (MODEM_FREQ_DEV)
+				SPI_master_transmit(0x11);								// SET_PROPERTY (CMD)
+				SPI_master_transmit(0x20);								// MODEM (group)
+				SPI_master_transmit(0x03);								// 3 (num_props)
+				SPI_master_transmit(0x0A);								// MODEM_FREQ_DEV (start_prop)
+				SPI_master_transmit((modem_freq_dev >> 16) & 0xFF);		// data (MODEM_FREQ_DEV)
+				SPI_master_transmit((modem_freq_dev >> 8) & 0xFF);		// data (MODEM_FREQ_DEV)
+				SPI_master_transmit(modem_freq_dev & 0xFF);				// data (MODEM_FREQ_DEV)
 				SPI_deassert_SS();
 			}
 		}
