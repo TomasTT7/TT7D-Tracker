@@ -29,29 +29,70 @@
 	as this might compromise the safety-function of the watchdog system reset mode. If the interrupt
 	is not executed before the next time-out, a system reset will be applied.
 	
-	PRESCALER
-		0		16ms
-		1		32ms
-		2		64ms
-		3		0.125s
-		4		0.25s
-		5		0.5s
-		6		1.0s
-		7		2.0s
-		8		4.0s
-		9		8.0s
-*/
-void WDT_enable(uint8_t prescaler, uint8_t wde, uint8_t wdie)
-{
-	uint8_t _presc = ((prescaler & 0x08) << 2) | (prescaler & 0x07);
+	PRESCALER				WDP3	WDP2	WDP1	WDP0
+		0		16ms		0		0		0		0
+		1		32ms		0		0		0		1
+		2		64ms		0		0		1		0
+		3		0.125s		0		0		1		1
+		4		0.25s		0		1		0		0
+		5		0.5s		0		1		0		1
+		6		1.0s		0		1		1		0
+		7		2.0s		0		1		1		1
+		8		4.0s		1		0		0		0
+		9		8.0s		1		0		0		1
 	
+	Enables 8 second watchdog in System Reset mode.
+	
+	*Enabling/disabling/modifying Watchdog requires a 4 clock cycle timed sequence. Because of that
+	different settings are carried out by calling different functions. Attempts to write a more
+	general function lead to violating this condition.
+*/
+void WDT_enable_system_reset(void)
+{
 	cli();
 	MCUSR &= ~(1 << WDRF);										// clear Watchdog System Reset Flag
 	wdt_reset();
 	/* Start timed sequence */
-	WDTCSR = (1 << WDCE) | (1 << WDE);							// Watchdog Change Enable, Watchdog System Reset Enable
-	WDTCSR = _presc;											// Watchdog Timer Prescaler
-	WDTCSR |= (wdie << WDIE) | (wde << WDE);
+	WDTCSR |= (1 << WDCE) | (1 << WDE);							// Watchdog Change Enable, Watchdog System Reset Enable
+	WDTCSR = (1 << WDE) | (1 << WDP3) | (1 << WDP0);
+	sei();
+}
+
+
+/*
+	Enables 8 second watchdog in Interrupt mode.
+	
+	*Enabling/disabling/modifying Watchdog requires a 4 clock cycle timed sequence. Because of that
+	different settings are carried out by calling different functions. Attempts to write a more
+	general function lead to violating this condition.
+*/
+void WDT_enable_interrupt(void)
+{
+	cli();
+	MCUSR &= ~(1 << WDRF);										// clear Watchdog System Reset Flag
+	wdt_reset();
+	/* Start timed sequence */
+	WDTCSR |= (1 << WDCE) | (1 << WDE);							// Watchdog Change Enable, Watchdog System Reset Enable
+	WDTCSR = (1 << WDIE) | (1 << WDP3) | (1 << WDP0);
+	sei();
+}
+
+
+/*
+	Enables 8 second watchdog in Interrupt and System Reset mode.
+	
+	*Enabling/disabling/modifying Watchdog requires a 4 clock cycle timed sequence. Because of that
+	different settings are carried out by calling different functions. Attempts to write a more
+	general function lead to violating this condition.
+*/
+void WDT_enable_system_reset_interrupt(void)
+{
+	cli();
+	MCUSR &= ~(1 << WDRF);										// clear Watchdog System Reset Flag
+	wdt_reset();
+	/* Start timed sequence */
+	WDTCSR |= (1 << WDCE) | (1 << WDE);							// Watchdog Change Enable, Watchdog System Reset Enable
+	WDTCSR = (1 << WDIE) | (1 << WDE) | (1 << WDP3) | (1 << WDP0);
 	sei();
 }
 

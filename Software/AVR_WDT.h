@@ -18,7 +18,9 @@
 
 
 // Functions
-void WDT_enable(uint8_t prescaler, uint8_t wde, uint8_t wdie);
+void WDT_enable_system_reset(void);
+void WDT_enable_interrupt(void);
+void WDT_enable_system_reset_interrupt(void);
 void WDT_disable(void);
 void WDT_timer_reset(void);
 void WDT_clear_WDRF(void);
