@@ -1,0 +1,27 @@
+/*
+	Programmable watchdog timer with separate on-chip 128kHz oscillator.
+	Selectable time-out period from 16ms to 8s.
+	WDT when enabled can be in interrupt mode, system reset mode or interrupt followed by system reset mode.
+	
+	Possible hardware fuse watchdog always on (WDTON) for fail-safe mode.
+		The watchdog always on (WDTON) fuse, if programmed, will force the watchdog timer to system reset mode.
+*/
+
+
+#ifndef AVR_WDT_H
+#define AVR_WDT_H
+
+
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <avr/wdt.h>
+
+
+// Functions
+void WDT_enable(uint8_t prescaler, uint8_t wde, uint8_t wdie);
+void WDT_disable(void);
+void WDT_timer_reset(void);
+void WDT_clear_WDRF(void);
+
+
+#endif // AVR_WDT_H_

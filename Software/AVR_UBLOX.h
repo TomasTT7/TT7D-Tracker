@@ -10,7 +10,6 @@
 #define AVR_UBLOX_H
 
 
-#include <avr/io.h>
 #include <avr/pgmspace.h>
 #include "AVR_UART.h"
 
