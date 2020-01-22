@@ -3,6 +3,9 @@
 		u-blox MAX-M8Q		Protocol 18.00 (Firmware 3.01)		concurrent GNSS reception (GPS, Galileo, GLONASS, BeiDou)
 		u-blox MAX-7Q		Protocol 14.00 (Firmware 1.00)		single GNSS reception (GPS, GLONASS)
 		Bwin GM10			Protocol 14.00 (Firmware 1.00)		single GNSS reception (GPS, GLONASS)
+	
+	Default Output
+		9600 baud, 8 bits, no parity bit, 1 stop bit
 */
 
 
@@ -14,10 +17,56 @@
 */
 void UBLOX_send_msg(const uint8_t * buff, uint8_t len)
 {
-  for(uint8_t i = 0; i < len; i++)
-  {
-    UART_transmit(pgm_read_byte(&buff[i]));
-  }
+	for(uint8_t i = 0; i < len; i++)
+	{
+		UART_transmit(pgm_read_byte(&buff[i]));
+	}
+}
+
+
+/*
+	
+*/
+uint8_t UBLOX_receive_msg(uint8_t * buffer, uint8_t len, uint8_t nmea)
+{
+	uint32_t timeout = 1000000;											// ~13 instructions per decrement (might need up to 1 second)
+	
+	UART_flush();
+	
+	buffer[0] = UART_receive(&timeout);									// wait for first byte with extended timeout period
+	
+	if(!timeout) return 0;												// return if first byte doesn't arrive within timeout period
+	
+	if(!nmea)															// receive UBX message
+	{
+		uint8_t i;
+		
+		for(i = 1; i < len; i++)
+		{
+			timeout = 5000;												// shorter timeout for rest of message
+			
+			buffer[i] = UART_receive(&timeout);
+			
+			if(!timeout) return 0;
+		}
+		
+		uint8_t checksum = UBLOX_verify_checksum(buffer, len);
+		
+		if(checksum) return i;
+		else return 0;
+	}else{																// receive NMEA message
+		uint8_t i = 1;
+		
+		while(1)
+		{
+			timeout = 5000;												// shorter timeout for rest of message
+			
+			buffer[i++] = UART_receive(&timeout);
+			if(buffer[i-1] == 0x0D) return i;
+			
+			if(!timeout) return 0;
+		}
+	}
 }
 
 

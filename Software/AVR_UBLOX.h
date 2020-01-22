@@ -3,6 +3,9 @@
 		u-blox MAX-M8Q		Protocol 18.00 (Firmware 3.01)		concurrent GNSS reception (GPS, Galileo, GLONASS, BeiDou)
 		u-blox MAX-7Q		Protocol 14.00 (Firmware 1.00)		single GNSS reception (GPS, GLONASS)
 		Bwin GM10			Protocol 14.00 (Firmware 1.00)		single GNSS reception (GPS, GLONASS)
+		
+	Default Output
+		9600 baud, 8 bits, no parity bit, 1 stop bit
 */
 
 
@@ -49,6 +52,7 @@ PROGMEM static const uint8_t setSwBackupMode[16]			= {0xB5, 0x62, 0x06, 0x57, 0x
 /* Set Continuous Mode in UBX-CFG-RXM */
 PROGMEM static const uint8_t setContinuousMode[10]			= {0xB5, 0x62, 0x06, 0x11, 0x02, 0x00, 0x08, 0x00, 0x21, 0x91};
 /* Request UBX-NAV-PVT (min. protocol 15 - GM10 protocol 14) */
+/* response length: MAX-M8 100 bytes, GM10 92 bytes */
 PROGMEM static const uint8_t requestPVT[8]					= {0xB5, 0x62, 0x01, 0x07, 0x00, 0x00, 0x08, 0x19};
 /* Request UBX-CFG-NAV5 */
 PROGMEM static const uint8_t requestNAV5[8]					= {0xB5, 0x62, 0x06, 0x24, 0x00, 0x00, 0x2A, 0x84};
@@ -63,6 +67,7 @@ PROGMEM static const uint8_t requestGPGGA[15]				= "$EIGPQ,GGA*27\r\n";
 
 // Functions
 void UBLOX_send_msg(const uint8_t * buff, uint8_t len);
+uint8_t UBLOX_receive_msg(uint8_t * buffer, uint8_t len, uint8_t nmea);
 uint8_t UBLOX_verify_checksum(uint8_t *buff, uint8_t len);
 void UBLOX_parse_0107(uint8_t * buffer, uint16_t * year, uint8_t * month, uint8_t * day, uint8_t * hour,
 					  uint8_t * min, uint8_t * sec, uint8_t * valid, uint8_t * fixType, uint8_t * gnssFixOK,
