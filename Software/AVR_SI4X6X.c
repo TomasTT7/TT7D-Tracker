@@ -657,6 +657,8 @@ void SI4X6X_tx_CW_blips(uint32_t count, uint16_t length_ms, uint32_t frequency, 
 		while(!TC1_compare_match());
 		SI4X6X_change_state(1);											// SLEEP/STANDBY
 		while(!TC1_compare_match());
+		
+		WDT_timer_reset();												// Watchdog reset
 	}
 	
 	TC1_deinit();
@@ -713,6 +715,8 @@ void SI4X6X_tx_FSK_rtty(uint8_t * packet, uint8_t length, uint16_t baud, uint32_
 		while(!TC1_compare_match());
 		PORTB |= (1 << PORTB0);											// set PB0 (GPIO2 - TXDATA) HIGH
 		while(!TC1_compare_match());
+		
+		WDT_timer_reset();												// Watchdog reset
 	}
 	
 	SI4X6X_change_state(1);												// SLEEP/STANDBY

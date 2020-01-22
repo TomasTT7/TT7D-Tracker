@@ -41,6 +41,7 @@
 #include <util/delay.h>
 #include "AVR_SPI.h"
 #include "AVR_TC.h"
+#include "AVR_WDT.h"
 
 
 // Functions
