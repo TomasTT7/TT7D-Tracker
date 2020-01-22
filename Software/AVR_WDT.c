@@ -46,6 +46,7 @@
 	*Enabling/disabling/modifying Watchdog requires a 4 clock cycle timed sequence. Because of that
 	different settings are carried out by calling different functions. Attempts to write a more
 	general function lead to violating this condition.
+	*Used compiler optimization: -Os.
 */
 void WDT_enable_system_reset(void)
 {
@@ -65,6 +66,7 @@ void WDT_enable_system_reset(void)
 	*Enabling/disabling/modifying Watchdog requires a 4 clock cycle timed sequence. Because of that
 	different settings are carried out by calling different functions. Attempts to write a more
 	general function lead to violating this condition.
+	*Used compiler optimization: -Os.
 */
 void WDT_enable_interrupt(void)
 {
@@ -84,6 +86,7 @@ void WDT_enable_interrupt(void)
 	*Enabling/disabling/modifying Watchdog requires a 4 clock cycle timed sequence. Because of that
 	different settings are carried out by calling different functions. Attempts to write a more
 	general function lead to violating this condition.
+	*Used compiler optimization: -Os.
 */
 void WDT_enable_system_reset_interrupt(void)
 {
@@ -100,6 +103,9 @@ void WDT_enable_system_reset_interrupt(void)
 /*
 	The application software should always clear the watchdog system reset flag (WDRF) and the WDE control bit
 	in the initialization routine, even if the watchdog is not in use.
+	
+	*Enabling/disabling/modifying Watchdog requires a 4 clock cycle timed sequence.
+	*Used compiler optimization: -Os.
 */
 void WDT_disable(void)
 {
