@@ -194,13 +194,36 @@ uint16_t APRS_bitstream(uint8_t * data, uint8_t len, uint8_t * output)
 	uint8_t series = 0;											// keeps track of successive '1's
 	uint16_t out_bits = 0;
 	
+	/* Identify Message Body */
+	uint8_t flags_start = 0;
+	uint8_t flags_end = len;
+	
+	int16_t n = 0;
+	
+	while(n < len)												// number of 0x7E flags in the beginning
+	{
+		if(data[n] != 0x7E) break;
+		n++;
+		flags_start++;
+	}
+	
+	n = len - 1;
+	
+	while(n >= 0)												// number of 0x7E flags at the end
+	{
+		if(data[n] != 0x7E) break;
+		n--;
+		flags_end--;
+	}
+	
+	/* Generate Bitstream */
 	for(uint16_t i = 0; i < len; i++)
 	{
 		for(int8_t b = 0; b < 8; b++)
 		{
 			if(data[i] & (1 << b))								// bit '1'
 			{
-				if(data[i] == 0x7E)								// bit '1' in Flag
+				if(data[i] == 0x7E && (i < flags_start || i >= flags_end))	// bit '1' in Flag
 				{
 					_byte = out_bits / 8;
 					_bit = out_bits % 8;
