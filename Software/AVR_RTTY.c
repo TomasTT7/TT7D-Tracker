@@ -8,8 +8,8 @@
 
 /*
 	Example Output
-		<0x00><0x00><0x00>$$TT7D,1,14:33:47,200112,49.49200,18.22200,1131,9,1600,2535,122*0AB4\n
-		lock_bytes$$callsign,id,time,date,latitude,longitude,altitude,satellites,battery[mV],temperature[0.1K],active_time[0.1s]*CRC\n
+		<0x00><0x00><0x00>$$TT7D,1,14:33:47,200112,49.49200,18.22200,1131,9,1600,25.5,122*5E73\n
+		lock_bytes$$callsign,id,time,date,latitude,longitude,altitude,satellites,battery[mV],temperature[°C],active_time[0.1s]*CRC\n
 */
 uint8_t RTTY_packet(uint8_t * packet, uint8_t * callsign, uint16_t id,  uint8_t hour, uint8_t minute, uint8_t second,
 					uint16_t year, uint8_t month, uint8_t day, float lat, float lon, int32_t alt, uint8_t sats,
@@ -137,7 +137,22 @@ uint8_t RTTY_packet(uint8_t * packet, uint8_t * callsign, uint16_t id,  uint8_t 
 	packet[n++] = ',';
 	
 	/* Temperature */
-	n = n_to_chars(packet, n, temperature);
+	int16_t _temperature = (int16_t)temperature - 2730;
+	
+	if(_temperature > 1250) _temperature = 1250;
+	if(_temperature < -2730) _temperature = -2730;
+	
+	if(_temperature < 0)
+	{
+		packet[n++] = '-';
+		_temperature *= -1;
+	}
+	
+	if(_temperature >= 1000) packet[n++] = _temperature / 1000 % 10 + '0';
+	if(_temperature >= 100) packet[n++] = _temperature / 100 % 10 + '0';
+	packet[n++] = _temperature / 10 % 10 + '0';
+	packet[n++] = '.';
+	packet[n++] = _temperature % 10 + '0';
 	
 	packet[n++] = ',';
 	
