@@ -55,12 +55,17 @@ void UART_transmit(uint8_t data)
 /*
 	
 */
-uint8_t UART_receive(void)
+uint8_t UART_receive(uint32_t * timeout)
 {
-	uint32_t timeout = 250000;
+	uint32_t _timeout = *timeout;
 	
-	while(!(UCSR0A & (1 << RXC0)) && timeout) timeout--;				// wait for receive flag or timeout
+	while(!(UCSR0A & (1 << RXC0)) && _timeout) _timeout--;				// wait for receive flag or timeout
 	
-	if(timeout) return UDR0;											// return byte read from data register
-	else return 0;
+	if(_timeout)
+	{
+		return UDR0;													// return byte read from data register
+	}else{
+		*timeout = 0;
+		return 0;
+	}
 }
