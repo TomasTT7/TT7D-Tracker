@@ -1,5 +1,5 @@
 /*
-	Firmware for TT7D balloon tracker. Continuous APRS/RTTY transmission version.
+	Firmware for TT7D balloon tracker. Power saving low duty cycle version.
 */ 
 
 
@@ -25,11 +25,16 @@
 #define APRS																	// comment out to disable APRS
 #define RTTY																	// comment out to disable RTTY
 
-#define RTTY_FREQ	434300000													// [Hz] RTTY frequency
+#define RTTY_FREQ		434300000												// [Hz] RTTY frequency
 
-#define RTTY_CALL	"TT7D"
-#define APRS_CALL	"OK7DMT"
-#define APRS_SSID	15
+#define RTTY_CALL		"TT7D"
+#define APRS_CALL		"OK7DMT"
+#define APRS_SSID		15
+
+#define RTTY_PWR		20
+#define APRS_PWR		20
+
+#define CYCLE_LENGTH	60000													// [ms] GNSS acquisition + RF transmissions + sleep cycle
 
 
 // Main Function ---------------------------------------------------------------------------------
@@ -56,13 +61,14 @@ int main(void)
 	UBLOX_send_msg(timepulseOFF, 40);											// turn off timepulse
 	UBLOX_send_msg(setNMEAoff, 28);												// turn off NMEA output
 	UBLOX_send_msg(setDynamicModelAirborne, 44);								// Dynamic Model: Airborne (<1g)
+	UBLOX_send_msg(saveConfiguration, 21);										// UBX-CFG-CFG: save current configuration
+	UART_deinit();
 	
 	/* Si4063 Initialization */
 	SPI_init_master();															// 4MHz SPI frequency
 	SI4X6X_init(25000000, 1);													// TCXO (16369000 fails initialization)
-	SI4X6X_set_PA_mode(2, 0);													// Si4463/64: higher maximum power, Switching-Amplifier Mode
-	SI4X6X_set_power_level(20);													// 
-	SI4X6X_change_state(1);														// SLEEP/STANDBY
+	SI4X6X_deinit(1);
+	SPI_deinit();
 	
 	WDT_timer_reset();															// Watchdog reset
 	
@@ -92,6 +98,7 @@ int main(void)
 	uint16_t T_K			= 0;
 	uint16_t T_Si_K			= 0;
 	
+	uint8_t reinit			= 0;
 	uint32_t active_time	= 0;
 	uint32_t timer			= 0;
 	
@@ -105,14 +112,15 @@ int main(void)
 		WDT_timer_reset();														// Watchdog reset
 		
 		/* Elapsed Time Measurement */
-		if(timer == 0)
-		{
-			TC2_init(124, 4, 1);												// 1ms interrupt based counter
-		}
+		TC2_init(124, 4, 1);													// 1ms interrupt based counter
 		
 		/* GNSS Data Acquisition */
 		uint8_t noposition = 0;
 		uint8_t check = 0;
+		
+		UART_init(9600);
+		UBLOX_send_msg(dummyByte, 1);
+		_delay_ms(500);															// GNSS module wake-up delay
 		
 		UART_flush();
 		UBLOX_send_msg(requestNAV5, 8);											// poll UBX-CFG-NAV5
@@ -130,28 +138,41 @@ int main(void)
 		
 		_delay_ms(100);															// in case UBX-ACK-ACK is sent
 		
-		/* WatchDog Reset */
-		WDT_timer_reset();														// Watchdog reset
-		
-		UART_flush();
-		UBLOX_send_msg(requestPVT, 8);											// poll UBX-NAV-PVT
-		
-		check = UBLOX_receive_msg(GNSS_buffer, 92, 0);							// UBX-NAV-PVT: MAX-M8 100 bytes, Biwin GM10: 92 bytes
-		
 		uint8_t valid_time = 0;
+		uint8_t attempts = 0;
 		
-		if(check)
+		while(1)
 		{
-			UBLOX_parse_0107(GNSS_buffer, &year, &month, &day, &hour, &min, &sec, &valid, &fixType,
-							&gnssFixOK, &psmState, &numSV, &lon, &lat, &hMSL, &hAcc, &vAcc, &pDOP);
+			/* WatchDog Reset */
+			WDT_timer_reset();													// Watchdog reset
 			
-			if((valid & 0x04) == 0x04 || (valid & 0x03) == 0x03) valid_time = 1;
-			else valid_time = 0;
+			attempts++;
+		
+			UART_flush();
+			UBLOX_send_msg(requestPVT, 8);										// poll UBX-NAV-PVT
+		
+			check = UBLOX_receive_msg(GNSS_buffer, 92, 0);						// UBX-NAV-PVT: MAX-M8 100 bytes, Biwin GM10: 92 bytes
+		
+			if(check)
+			{
+				UBLOX_parse_0107(GNSS_buffer, &year, &month, &day, &hour, &min, &sec, &valid, &fixType,
+								&gnssFixOK, &psmState, &numSV, &lon, &lat, &hMSL, &hAcc, &vAcc, &pDOP);
 			
-			if(gnssFixOK && valid_time) noposition = 0;							// transmit only valid or empty data
-			else noposition = 1;
-		}else{
-			noposition = 1;
+				if((valid & 0x04) == 0x04 || (valid & 0x03) == 0x03) valid_time = 1;
+				else valid_time = 0;
+			
+				if(gnssFixOK && valid_time && numSV >= 5)						// valid fix, time and date and minimum number of satellites condition
+				{
+					noposition = 0;
+					break;
+				}
+			}
+			
+			if(attempts > 37)													// limit acquisition to 37s - ephemeris cycle 18-36s
+			{
+				noposition = 1;
+				break;
+			}
 		}
 		
 		if(noposition)
@@ -164,6 +185,8 @@ int main(void)
 				hour = 0;
 				min = 0;
 				sec = 0;
+				
+				reinit++;														// increase counter of failed fix acquisitions in row
 			}
 			
 			valid = 0;
@@ -178,6 +201,14 @@ int main(void)
 			vAcc = 0;
 			pDOP = 0;
 		}
+		else
+		{
+			reinit = 0;															// reset counter of failed fix acquisitions in row
+		}
+		
+		UBLOX_send_msg(saveConfiguration, 21);									// UBX-CFG-CFG: save current configuration
+		UBLOX_send_msg(setBackupMode, 16);										// command GNSS module to software backup mode 
+		UART_deinit();
 		
 		/* ADC */
 		ADC_init_AVCC(2);
@@ -192,15 +223,59 @@ int main(void)
 		T_K = ADC_calculate_temperature(T_raw, 0, 1);							// [?]
 		
 		/* Si4063 Temperature */
+		SPI_init_master();														// 4MHz SPI frequency
+		SI4X6X_init(25000000, 1);												// TCXO (16369000 fails initialization)
+		
 		uint16_t T_Si_raw = SI4X6X_get_temperature();
 		T_Si_K = (uint32_t)T_Si_raw * 8990 / 4096 - 200;						// [0.1K]
+		
+		SI4X6X_deinit(1);
+		SPI_deinit();
 		
 		/* WatchDog Reset */
 		WDT_timer_reset();														// Watchdog reset
 		
 		/* Elapsed Time Measurement */
 		timer = TC2_elapsed_time(0);
-		active_time = timer - active_time;
+		active_time = timer;
+		
+	#ifdef APRS
+		/* Sequence Counter */
+		APRS_sequence++;
+		
+		/* APRS Packet */
+		uint8_t aprs_bitstream[90] = {0};
+		
+		uint8_t B = APRS_packet(packet, (uint8_t *)APRS_CALL, APRS_SSID, lat, lon, (uint16_t)hMSL,
+								APRS_sequence, numSV, V_mV, T_Si_K, active_time / 100, noposition);
+		uint16_t b = APRS_bitstream(packet, B, aprs_bitstream);
+		
+		/* GeoFenced Frequency - APRS */
+		uint32_t tx_frequency = GEOFENCE_frequency(lat, lon);					// decide on frequency based on GPS position
+		
+		/* APRS Transmission */
+		if(tx_frequency > 144000000 && tx_frequency < 146000000)				// no transmission if tx_frequency equals 0
+		{
+			/* Si4063 Setup */
+			SPI_init_master();													// 4MHz SPI frequency
+			SI4X6X_init(25000000, 1);											// TCXO (16369000 fails initialization)
+			SI4X6X_set_PA_mode(2, 0);											// Si4463/64: higher maximum power, Switching-Amplifier Mode
+			SI4X6X_set_power_level(APRS_PWR);									// 
+			
+			/* LED - APRS Transmission */
+			PORTD |= (1 << PORTD4);												// set PD4 HIGH
+			
+			SI4X6X_tx_GFSK_aprs(aprs_bitstream, b, tx_frequency, 16369000, 0);
+			
+			PORTD &= ~(1 << PORTD4);											// set PD4 LOW
+			
+			SI4X6X_deinit(1);
+			SPI_deinit();
+		}
+	#endif
+		
+		/* WatchDog Reset */
+		WDT_timer_reset();														// Watchdog reset
 		
 	#ifdef RTTY
 		/* Sequence Counter */
@@ -210,62 +285,48 @@ int main(void)
 		uint8_t n = RTTY_packet(packet, (uint8_t *)RTTY_CALL, RTTY_sequence, hour, min, sec, year, month, day,
 								lat, lon, hMSL, numSV, V_mV, T_Si_K, active_time / 100);
 		
+		/* Si4063 Setup */
+		SPI_init_master();														// 4MHz SPI frequency
+		SI4X6X_init(25000000, 1);												// TCXO (16369000 fails initialization)
+		SI4X6X_set_PA_mode(2, 0);												// Si4463/64: higher maximum power, Switching-Amplifier Mode
+		SI4X6X_set_power_level(RTTY_PWR);										// 
+		
+		/* CW Blips */
+		SI4X6X_tx_CW_blips(5, 500, RTTY_FREQ, 16369000, 0);
+		
 		/* RTTY Transmission */
 		SI4X6X_tx_FSK_rtty(packet, n, 100, RTTY_FREQ, 16369000, 29, 29);		// 100 baud (~8s transmission)
+		
+		SI4X6X_deinit(1);
+		SPI_deinit();
 		
 		/* LED - RTTY Transmission */
 		PORTD |= (1 << PORTD4);													// set PD4 HIGH
         _delay_ms(20);
         PORTD &= ~(1 << PORTD4);												// set PD4 LOW
 	#endif
-	
-		/* WatchDog Reset */
-		WDT_timer_reset();														// Watchdog reset
 		
 		/* Elapsed Time Measurement */
-		timer = TC2_elapsed_time(0);
+		timer = TC2_elapsed_time(1);
+		TC2_deinit();
 		
-	#ifdef APRS
-		if(timer >= 60000)														// transmit APRS packet every X [ms]
+		/* Forced Reset Check */
+		if(reinit >= 5)
 		{
-			/* Sequence Counter */
-			APRS_sequence++;
-			
-			/* APRS Packet */
-			uint8_t aprs_bitstream[90] = {0};
-			
-			uint8_t B = APRS_packet(packet, (uint8_t *)APRS_CALL, APRS_SSID, lat, lon, (uint16_t)hMSL,
-									APRS_sequence, numSV, V_mV, T_Si_K, active_time / 100, noposition);
-			uint16_t b = APRS_bitstream(packet, B, aprs_bitstream);
-			
-			/* GeoFenced Frequency - APRS */
-			uint32_t tx_frequency = GEOFENCE_frequency(lat, lon);				// decide on frequency based on GPS position
-			
-			/* APRS Transmission */
-			if(tx_frequency > 144000000 && tx_frequency < 146000000)			// no transmission if tx_frequency equals 0
-			{
-				/* LED - APRS Transmission */
-				PORTD |= (1 << PORTD4);											// set PD4 HIGH
-				
-				SI4X6X_tx_GFSK_aprs(aprs_bitstream, b, tx_frequency, 16369000, 0);
-				
-				PORTD &= ~(1 << PORTD4);										// set PD4 LOW
-			}
-			
-			TC2_elapsed_time(1);												// reset timer
-			TC2_deinit();
-			
-			timer = 0;
+			WDT_force_system_reset();											// enables 16ms WatchDog
+			_delay_ms(100);
 		}
-	#endif
 		
-		/* Elapsed Time Measurement */
-		timer = TC2_elapsed_time(0);
-		active_time = timer;
+		/* Sleep */
+		uint32_t sleep = (CYCLE_LENGTH - timer) / 4000;
 		
-	#ifndef APRS
-		timer = 0;
-		active_time = 0;
-	#endif
-    }
+		for(uint8_t i = 0; i < sleep; i++)
+		{
+			WDT_enable_system_reset_interrupt();								// 4 seconds
+			SLEEP_enable(2);													// sleep for 4 seconds
+		}
+		
+		/* WDT - Restore */
+		WDT_enable_system_reset();												// 8 seconds, System Reset mode
+	}
 }
