@@ -24,6 +24,7 @@ void WDT_enable_system_reset_interrupt(void);
 void WDT_disable(void);
 void WDT_timer_reset(void);
 void WDT_clear_WDRF(void);
+void WDT_force_system_reset(void);
 
 
 #endif // AVR_WDT_H_
